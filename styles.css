@@ -1,0 +1,229 @@
+/* ==========================================================================
+   MACRO-TERM v4.88 // 1980s Retro CRT Financial Terminal Stylesheet
+   Phosphor Green (#00ff41) & Phosphor Amber (#ffb000) modes
+   ========================================================================== */
+
+:root {
+    --bg-color: #050505;
+    --panel-bg: #080a08;
+    --panel-alt: #0b100b;
+    --primary: #00ff41;
+    --primary-dim: rgba(0, 255, 65, 0.24);
+    --primary-faint: rgba(0, 255, 65, 0.08);
+    --alert-color: #ff3333;
+    --alert-dim: rgba(255, 51, 51, 0.22);
+    --glow: 0 0 8px rgba(0, 255, 65, 0.45);
+    --glow-strong: 0 0 14px rgba(0, 255, 65, 0.8);
+    --border-color: #008f11;
+}
+
+body.theme-amber {
+    --bg-color: #050505;
+    --panel-bg: #0a0804;
+    --panel-alt: #120e06;
+    --primary: #ffb000;
+    --primary-dim: rgba(255, 176, 0, 0.24);
+    --primary-faint: rgba(255, 176, 0, 0.08);
+    --alert-color: #ff4500;
+    --alert-dim: rgba(255, 69, 0, 0.24);
+    --glow: 0 0 8px rgba(255, 176, 0, 0.45);
+    --glow-strong: 0 0 14px rgba(255, 176, 0, 0.8);
+    --border-color: #996600;
+}
+
+* {
+    box-sizing: border-box;
+    font-variant-numeric: tabular-nums;
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--primary);
+    font-family: 'Fira Code', 'IBM Plex Mono', monospace;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+    text-shadow: var(--glow);
+    transition: color 0.18s ease, border-color 0.18s ease;
+}
+
+.font-vt {
+    font-family: 'VT323', monospace;
+}
+
+/* CRT Scanlines & Vignette Overlay */
+.crt-overlay {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+    background:
+        linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.26) 50%),
+        linear-gradient(90deg, rgba(255, 0, 0, 0.018), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.018));
+    background-size: 100% 3px, 6px 100%;
+    box-shadow: inset 0 0 65px rgba(0, 0, 0, 0.82);
+}
+
+/* Retro Panels & Headers */
+.retro-border {
+    border: 1px solid var(--border-color);
+    background-color: var(--panel-bg);
+    box-shadow: inset 0 0 12px var(--primary-faint);
+}
+
+.retro-header {
+    background-color: var(--primary-dim);
+    border-bottom: 1px solid var(--border-color);
+    color: var(--primary);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+}
+
+.retro-btn {
+    border: 1px solid var(--border-color);
+    background-color: transparent;
+    color: var(--primary);
+    padding: 4px 10px;
+    font-family: 'Fira Code', monospace;
+    font-size: 0.74rem;
+    cursor: pointer;
+    transition: all 0.12s ease;
+    text-transform: uppercase;
+}
+
+.retro-btn:hover,
+.retro-btn.active {
+    background-color: var(--primary);
+    color: #050505;
+    text-shadow: none;
+    box-shadow: var(--glow-strong);
+    font-weight: 700;
+}
+
+.retro-btn-danger {
+    border-color: var(--alert-color);
+    color: var(--alert-color);
+    text-shadow: 0 0 6px rgba(255, 51, 51, 0.5);
+}
+
+.retro-btn-danger:hover {
+    background-color: var(--alert-color);
+    color: #050505;
+    text-shadow: none;
+}
+
+/* Continuous Ticker Tape */
+.ticker-wrap {
+    width: 100%;
+    overflow: hidden;
+    background: #020402;
+    border: 1px solid var(--border-color);
+    padding: 4px 0;
+    white-space: nowrap;
+}
+
+.ticker-track {
+    display: inline-block;
+    white-space: nowrap;
+    animation: crt-marquee 45s linear infinite;
+}
+
+.ticker-wrap:hover .ticker-track {
+    animation-play-state: paused;
+}
+
+.ticker-item {
+    display: inline-block;
+    margin-right: 26px;
+    font-size: 0.74rem;
+}
+
+@keyframes crt-marquee {
+    0% { transform: translateX(0%); }
+    100% { transform: translateX(-50%); }
+}
+
+/* Watchlist Rows */
+.ticker-row {
+    border-bottom: 1px dashed var(--primary-dim);
+    cursor: pointer;
+    transition: background-color 0.1s ease;
+}
+
+.ticker-row:hover {
+    background-color: var(--primary-faint);
+}
+
+.ticker-row.selected {
+    background-color: var(--primary-dim);
+    border-left: 3px solid var(--primary);
+}
+
+.val-up {
+    color: var(--primary);
+}
+
+.val-down {
+    color: var(--alert-color);
+    text-shadow: 0 0 6px rgba(255, 51, 51, 0.5);
+}
+
+.badge-closed {
+    border: 1px solid var(--alert-color);
+    background: var(--alert-dim);
+    color: var(--alert-color);
+    padding: 1px 7px;
+    font-size: 0.68rem;
+    font-weight: 700;
+}
+
+.spread-inverted {
+    border-color: var(--alert-color) !important;
+    background-color: rgba(80, 10, 10, 0.35) !important;
+    box-shadow: 0 0 12px rgba(255, 51, 51, 0.35);
+}
+
+.macro-card {
+    background: var(--panel-alt);
+    border: 1px solid var(--border-color);
+    padding: 6px 8px;
+}
+
+/* Blink & Price Flash Animations */
+.blink {
+    animation: blinker 1.05s steps(2, start) infinite;
+}
+
+@keyframes blinker {
+    0%, 49% { opacity: 1; }
+    50%, 100% { opacity: 0.15; }
+}
+
+@keyframes flash-up {
+    0% { background-color: var(--primary-dim); }
+    100% { background-color: transparent; }
+}
+
+@keyframes flash-down {
+    0% { background-color: var(--alert-dim); }
+    100% { background-color: transparent; }
+}
+
+.flash-positive { animation: flash-up 0.5s ease-out; }
+.flash-negative { animation: flash-down 0.5s ease-out; }
+
+/* Retro Scrollbar */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: #050505;
+    border-left: 1px solid var(--primary-dim);
+}
+::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--primary);
+}

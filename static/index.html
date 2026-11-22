@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MACRO-TERM v4.88 // Monitor Macroeconómico Global</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&family=VT323&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="min-h-screen flex flex-col justify-between p-1.5 sm:p-2.5 text-xs sm:text-sm select-none">
+
+    <!-- Capa CRT Scanlines & Viñeta -->
+    <div class="crt-overlay"></div>
+
+    <!-- BARRA SUPERIOR DE ESTADO Y RELOJES -->
+    <header class="retro-border p-2 mb-1.5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2">
+        <div class="flex flex-wrap items-center gap-2 sm:gap-4">
+            <div class="flex items-center gap-2">
+                <span class="px-1.5 py-0.5 font-bold" style="background: var(--primary); color: #050505; text-shadow: none;">MACRO-TERM</span>
+                <span class="font-vt text-lg sm:text-xl tracking-wider font-bold">[MACRO-TERM v4.88 // GLOBAL MONITOR]</span>
+            </div>
+            <div id="feed-status" class="text-[11px] sm:text-xs font-bold tracking-wider flex items-center gap-1.5">
+                <span class="inline-block w-2 h-2 rounded-full blink" style="background-color: var(--primary);"></span>
+                <span id="feed-status-text">[● LIVE FEED: CONECTANDO...]</span>
+            </div>
+            <span id="market-closed-badge" class="badge-closed hidden">[MARKET CLOSED / LAST CLOSE]</span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between lg:justify-end gap-3 text-[11px] sm:text-xs">
+            <div class="flex items-center gap-3">
+                <div><span class="opacity-70">UTC:</span> <span id="clock-utc" class="font-bold">00:00:00</span></div>
+                <div><span class="opacity-70">LOCAL:</span> <span id="clock-local" class="font-bold">00:00:00</span></div>
+            </div>
+            <div class="hidden sm:block opacity-75">|</div>
+            <div class="text-[11px]">
+                <span class="opacity-70">SESIÓN:</span> <span id="market-session" class="font-bold">GLOBAL</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- TICKER TAPE CONTINUO -->
+    <div class="ticker-wrap mb-1.5">
+        <div id="ticker-track" class="ticker-track">
+            <span class="ticker-item opacity-70">SINCRONIZANDO COTIZACIONES REALES (YAHOO FINANCE / FRED / BCRP)...</span>
+        </div>
+    </div>
+
+    <!-- BARRA DE COMANDOS -->
+    <section class="retro-border p-1.5 sm:p-2 mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
+            <span class="text-[11px] opacity-80 mr-1 font-bold">[COMANDOS]:</span>
+            <button id="btn-theme" class="retro-btn" title="Alternar Fósforo Verde / Ámbar">
+                TEMA: FÓSFORO VERDE
+            </button>
+            <button id="btn-pause" class="retro-btn" title="Pausar o reanudar auto-actualización">
+                [||] PAUSAR FEED
+            </button>
+            <button id="btn-chart-mode" class="retro-btn" title="Alternar entre Línea CRT y Velas Japonesas">
+                GRÁFICO: LÍNEA
+            </button>
+            <button id="btn-sync" class="retro-btn" title="Forzar descarga inmediata de datos reales">
+                ↻ SYNC NOW
+            </button>
+        </div>
+
+        <div class="flex items-center gap-3 text-[11px]">
+            <div><span class="opacity-70">FUENTES:</span> <span class="font-bold">YFINANCE · FRED · BCRP</span></div>
+            <div class="hidden sm:block opacity-60">|</div>
+            <div><span class="opacity-70">PRÓX. SYNC:</span> <span id="next-sync-cd" class="font-bold">30s</span></div>
+        </div>
+    </section>
+
+    <!-- CONTENIDO PRINCIPAL: WATCHLIST (30-35%) + GRÁFICO CANVAS (65-70%) -->
+    <main class="grid grid-cols-1 lg:grid-cols-12 gap-2 flex-grow mb-2">
+
+        <!-- PANEL IZQUIERDO: WATCHLIST -->
+        <aside class="lg:col-span-4 xl:col-span-4 retro-border flex flex-col max-h-[540px] lg:max-h-[600px]">
+            <div class="retro-header px-2.5 py-1.5 flex justify-between items-center text-xs">
+                <span>[01] WATCHLIST GLOBAL (REAL-TIME)</span>
+                <span class="text-[10px] opacity-80">[CLICK PARA GRÁFICO]</span>
+            </div>
+
+            <div class="grid grid-cols-12 px-2 py-1 text-[10px] opacity-75 border-b border-dashed" style="border-color: var(--border-color);">
+                <div class="col-span-5">TICKER / ACTIVO</div>
+                <div class="col-span-3 text-right">ÚLTIMO</div>
+                <div class="col-span-2 text-right">VAR %</div>
+                <div class="col-span-2 text-right">TEND.</div>
+            </div>
+
+            <div id="indices-list" class="overflow-y-auto flex-grow">
+                <div class="p-4 text-center opacity-70 text-xs">CARGANDO MERCADOS REALES...</div>
+            </div>
+        </aside>
+
+        <!-- PANEL CENTRAL/DERECHO: GRÁFICO INTERACTIVO CANVAS -->
+        <section class="lg:col-span-8 xl:col-span-8 flex flex-col gap-2">
+            <div class="retro-border p-2.5 flex flex-col justify-between flex-grow">
+                <!-- Cabecera del activo seleccionado -->
+                <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-2 pb-2 mb-2 border-b border-dashed" style="border-color: var(--border-color);">
+                    <div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span id="detail-ticker" class="font-vt text-2xl sm:text-3xl font-bold tracking-wider">SPX</span>
+                            <span id="detail-symbol" class="text-[10px] px-1.5 py-0.5 border opacity-85" style="border-color: var(--border-color);">^GSPC</span>
+                            <span id="detail-category" class="text-[10px] px-1.5 py-0.5 border" style="border-color: var(--border-color);">RENTA VARIABLE</span>
+                            <span id="detail-closed" class="badge-closed hidden">LAST CLOSE</span>
+                        </div>
+                        <div id="detail-name" class="text-xs sm:text-sm opacity-95 font-bold mt-0.5">S&amp;P 500 Index</div>
+                        <div id="detail-desc" class="text-[11px] opacity-70 mt-0.5">Cargando información del instrumento...</div>
+                    </div>
+
+                    <div class="flex flex-col sm:items-end">
+                        <div class="flex items-baseline gap-2">
+                            <span id="detail-price" class="font-vt text-3xl sm:text-4xl font-bold">--</span>
+                            <span id="detail-change" class="text-xs sm:text-sm font-bold">--</span>
+                        </div>
+                        <div class="flex flex-wrap gap-3 text-[11px] opacity-80 mt-1">
+                            <span>MAX: <strong id="detail-high">--</strong></span>
+                            <span>MIN: <strong id="detail-low">--</strong></span>
+                            <span>CIERRE ANT: <strong id="detail-prev">--</strong></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Botones de temporalidad y lectura de crosshair -->
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                    <div class="flex items-center gap-1">
+                        <span class="text-[11px] opacity-75 mr-1">RANGO:</span>
+                        <button class="retro-btn tf-btn active" data-tf="1D">1D - 1m</button>
+                        <button class="retro-btn tf-btn" data-tf="5D">5D - 15m</button>
+                        <button class="retro-btn tf-btn" data-tf="1M">1M - 1d</button>
+                        <button class="retro-btn tf-btn" data-tf="1Y">1Y</button>
+                    </div>
+                    <div id="crosshair-info" class="text-[11px] font-mono opacity-85">
+                        CURSOR: MUEVA EL PUNTERO SOBRE EL GRÁFICO PARA INSPECCIONAR
+                    </div>
+                </div>
+
+                <!-- Canvas HTML5 Responsivo -->
+                <div id="canvas-container" class="relative w-full h-[290px] sm:h-[360px] lg:h-[390px] border" style="border-color: var(--primary-dim); background-color: #030403;">
+                    <canvas id="retroChart"></canvas>
+                    <div id="chart-loading" class="hidden absolute inset-0 flex items-center justify-center bg-black/60 text-xs font-bold tracking-widest">
+                        [DESCARGANDO SERIE HISTÓRICA...]
+                    </div>
+                </div>
+
+                <!-- Pie de gráfico -->
+                <div class="mt-2 pt-1.5 border-t border-dashed flex flex-wrap items-center justify-between gap-2 text-[11px]" style="border-color: var(--primary-dim);">
+                    <div>
+                        <span class="opacity-70">SENSIBILIDAD MACRO:</span>
+                        <span id="detail-sensitivity" class="font-bold">--</span>
+                    </div>
+                    <div>
+                        <span class="opacity-70">ÚLTIMA BARRA:</span>
+                        <span id="last-bar-time" class="font-bold">--</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- PANEL INFERIOR: SPREAD 10Y-2Y | INDICADORES MACRO (FRED/BCRP) | CONSOLA [SYS_LOG] -->
+    <footer class="grid grid-cols-1 lg:grid-cols-12 gap-2">
+
+        <!-- SPREAD CURVA 10Y-2Y -->
+        <div id="spread-panel" class="lg:col-span-3 retro-border p-2.5 flex flex-col justify-between">
+            <div>
+                <div class="text-[10px] opacity-75 font-bold tracking-wider">SPREAD CURVA US (10Y - 2Y)</div>
+                <div class="flex items-baseline gap-2 mt-1">
+                    <span id="spread-val" class="font-vt text-3xl font-bold">--</span>
+                    <span id="spread-bps" class="text-xs opacity-80">(-- bps)</span>
+                </div>
+                <div class="mt-2 pt-1.5 border-t border-dashed text-[11px] space-y-0.5" style="border-color: var(--primary-dim);">
+                    <div class="flex justify-between"><span class="opacity-75">US 10Y YIELD:</span><strong id="spread-10y">--</strong></div>
+                    <div class="flex justify-between"><span class="opacity-75">US 02Y YIELD:</span><strong id="spread-2y">--</strong></div>
+                    <div class="text-[10px] opacity-65 pt-0.5" id="spread-src">SRC: --</div>
+                </div>
+            </div>
+            <div id="spread-regime" class="mt-2 text-[11px] font-bold">CALCULANDO PENDIENTE...</div>
+        </div>
+
+        <!-- PANEL MACRO REFERENCIA (FRED + BCRP) -->
+        <div class="lg:col-span-5 retro-border p-2.5 flex flex-col">
+            <div class="flex justify-between items-center text-[10px] opacity-80 font-bold tracking-wider mb-1.5">
+                <span>[02] BENCHMARKS MACRO &amp; RIESGO PAÍS (FRED / BCRP)</span>
+                <span id="macro-updated">--</span>
+            </div>
+            <div id="macro-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1.5 flex-grow">
+                <div class="macro-card text-[11px] opacity-70">CARGANDO FRED/BCRP...</div>
+            </div>
+        </div>
+
+        <!-- CONSOLA [SYS_LOG] Y ALERTAS ±1.5% -->
+        <div class="lg:col-span-4 retro-border flex flex-col h-[175px] lg:h-[185px]">
+            <div class="retro-header px-2.5 py-1 flex justify-between items-center text-[11px]">
+                <span>[SYS_LOG] TELEMETRÍA &amp; ALERTAS (±1.5%)</span>
+                <button onclick="clearConsole()" class="text-[10px] underline hover:opacity-75 cursor-pointer">[LIMPIAR]</button>
+            </div>
+            <div id="console-log" class="p-2 overflow-y-auto flex-grow font-mono text-[11px] space-y-1">
+            </div>
+        </div>
+
+    </footer>
+
+    <script>
+        const REFRESH_SECONDS = 30;
+
+        const state = {
+            selectedTicker: '^GSPC',
+            timeframe: '1D',
+            theme: 'green',      // 'green' | 'amber'
+            chartMode: 'line',   // 'line' | 'candle'
+            isPaused: false,
+            countdown: REFRESH_SECONDS,
+            catalog: {},         // category -> [asset meta]
+            quotes: {},          // ticker -> quote object
+            prevPrices: {},      // ticker -> previous rendered price (for flash)
+            chartCache: {},      // `${ticker}|${tf}` -> chart payload
+            activeChart: null,
+            mousePos: null,
+            initializedList: false,
+        };
+
+        // -----------------------------------------------------------------
+        // Format Helpers
+        // -----------------------------------------------------------------
+        function formatValue(asset, val) {
+            if (val === null || val === undefined || Number.isNaN(val)) return 'N/A';
+            const dec = asset.decimals ?? 2;
+            const num = Number(val).toLocaleString('en-US', {
+                minimumFractionDigits: dec,
+                maximumFractionDigits: dec,
+            });
+            if (asset.unit === '$') return `$${num}`;
+            if (asset.unit === '%') return `${num}%`;
+            return num;
+        }
+
+        function getAsciiBar(pct) {
+            if (pct === null || pct === undefined) return '[····]';
+            if (pct > 1.5) return '[▲▲▲▲]';
+            if (pct > 0.5) return '[▲▲▲·]';
+            if (pct > 0.05) return '[▲▲··]';
+            if (pct >= -0.05) return '[····]';
+            if (pct >= -0.5) return '[▼▼··]';
+            if (pct >= -1.5) return '[▼▼▼·]';
+            return '[▼▼▼▼]';
+        }
+
+        function logConsole(type, message, isAlert = false) {
+            const consoleEl = document.getElementById('console-log');
+            const timeStr = new Date().toTimeString().split(' ')[0];
+            const line = document.createElement('div');
+            line.className = 'flex items-start gap-1.5 leading-tight';
+            const badgeColor = isAlert ? 'var(--alert-color)' : 'var(--primary)';
+            line.innerHTML = `
+                <span class="opacity-60 shrink-0">[${timeStr}]</span>
+                <span class="font-bold shrink-0" style="color:${badgeColor};">[${type}]</span>
+                <span class="${isAlert ? 'val-down font-bold' : ''}">${message}</span>
+            `;
+            consoleEl.appendChild(line);
+            while (consoleEl.children.length > 80) consoleEl.removeChild(consoleEl.firstChild);
+            consoleEl.scrollTop = consoleEl.scrollHeight;
+        }
+
+        function clearConsole() {
+            document.getElementById('console-log').innerHTML = '';
+            logConsole('SYS', 'Buffer de consola reiniciado por operador.');
+        }
+
+        // -----------------------------------------------------------------
+        // API Fetchers (Real Data from FastAPI)
+        // -----------------------------------------------------------------
+        async function fetchSnapshot(silent = false) {
+            try {
+                const resp = await fetch('/api/snapshot');
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const data = await resp.json();
+
+                state.catalog = data.catalog || state.catalog;
+                state.quotes = data.quotes || {};
+
+                // Market closed badge
+                const closedBadge = document.getElementById('market-closed-badge');
+                if (data.all_closed) closedBadge.classList.remove('hidden');
+                else closedBadge.classList.add('hidden');
+
+                if (!state.initializedList) {
+                    renderIndicesList();
+                    state.initializedList = true;
+                } else {
+                    updateAllRows();
+                }
+
+                renderTickerTape();
+                renderSpreadPanel(data.spread);
+                updateSelectedDetailPanel();
+
+                if (!silent) {
+                    const activeCount = Object.values(state.quotes).filter(q => q.status === 'OK').length;
+                    logConsole('YFINANCE', `Sync OK (${activeCount} activos) · ${data.fetched_at}`);
+                    if (data.alerts && data.alerts.length > 0) {
+                        data.alerts.slice(0, 5).forEach(al => {
+                            const sign = al.change_pct >= 0 ? '+' : '';
+                            logConsole('ALERTA >1.5%', `${al.short} ${formatValue(al, al.price)} (${sign}${al.change_pct.toFixed(2)}%)`, true);
+                        });
+                    }
+                    if (data.spread && data.spread.inverted) {
+                        logConsole('CURVA', `ALERTA: Spread 10Y-2Y INVERTIDO (${data.spread.spread.toFixed(3)}%)`, true);
+                    }
+                }
+            } catch (err) {
+                logConsole('ERR', `Error obteniendo snapshot: ${err.message}`, true);
+            }
+        }
+
+        async function fetchChart(ticker, tf, showSpinner = true) {
+            const cacheKey = `${ticker}|${tf}`;
+            if (state.chartCache[cacheKey]) {
+                state.activeChart = state.chartCache[cacheKey];
+                drawChart();
+                showSpinner = false;
+            }
+            const loader = document.getElementById('chart-loading');
+            if (showSpinner) loader.classList.remove('hidden');
+
+            try {
+                const url = `/api/chart?ticker=${encodeURIComponent(ticker)}&tf=${encodeURIComponent(tf)}`;
+                const resp = await fetch(url);
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const data = await resp.json();
+                state.chartCache[cacheKey] = data;
+
+                if (state.selectedTicker === ticker && state.timeframe === tf) {
+                    state.activeChart = data;
+                    drawChart();
+                }
+            } catch (err) {
+                logConsole('CHART_ERR', `No se pudo cargar serie ${ticker} (${tf}): ${err.message}`, true);
+            } finally {
+                loader.classList.add('hidden');
+            }
+        }
+
+        async function fetchMacro() {
+            try {
+                const resp = await fetch('/api/macro');
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const data = await resp.json();
+                renderMacroGrid(data);
+                logConsole('MACRO', `FRED + BCRP sincronizados (${(data.indicators || []).length} indicadores).`);
+            } catch (err) {
+                logConsole('MACRO_ERR', `Error macro: ${err.message}`, true);
+            }
+        }
+
+        async function forceSyncNow() {
+            const btn = document.getElementById('btn-sync');
+            btn.textContent = '↻ SYNC...';
+            try {
+                await fetch('/api/sync', { method: 'POST' });
+                state.chartCache = {};
+                await Promise.all([
+                    fetchSnapshot(false),
+                    fetchChart(state.selectedTicker, state.timeframe, true),
+                    fetchMacro(),
+                ]);
+                state.countdown = REFRESH_SECONDS;
+            } finally {
+                btn.textContent = '↻ SYNC NOW';
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // UI Renderers (Watchlist, Ticker Tape, Details, Spread, Macro)
+        // -----------------------------------------------------------------
+        function renderTickerTape() {
+            const items = [];
+            Object.values(state.quotes).forEach(q => {
+                if (q.price === null || q.price === undefined) return;
+                const pct = q.change_pct ?? 0;
+                const cls = pct >= 0 ? 'val-up' : 'val-down';
+                const arrow = pct >= 0 ? '▲' : '▼';
+                const sign = pct >= 0 ? '+' : '';
+                items.push(
+                    `<span class="ticker-item">` +
+                    `<strong class="mr-1">${q.short}</strong>` +
+                    `<span class="opacity-90 mr-1">${formatValue(q, q.price)}</span>` +
+                    `<span class="${cls} font-bold">${arrow} ${sign}${pct.toFixed(2)}%</span>` +
+                    `</span>`
+                );
+            });
+            const html = items.join('') || '<span class="ticker-item opacity-70">SIN DATOS...</span>';
+            document.getElementById('ticker-track').innerHTML = html + html;
+        }
+
+        function renderIndicesList() {
+            const container = document.getElementById('indices-list');
+            container.innerHTML = '';
+
+            Object.entries(state.catalog).forEach(([category, assets]) => {
+                const catHeader = document.createElement('div');
+                catHeader.className = 'px-2 py-1 text-[10px] font-bold tracking-wider sticky top-0 z-10';
+                catHeader.style.backgroundColor = 'var(--primary-dim)';
+                catHeader.style.borderTop = '1px solid var(--border-color)';
+                catHeader.style.borderBottom = '1px solid var(--border-color)';
+                catHeader.textContent = `>> ${category}`;
+                container.appendChild(catHeader);
+
+                assets.forEach(asset => {
+                    const q = state.quotes[asset.ticker] || asset;
+                    const pct = q.change_pct ?? 0;
+                    const isUp = pct >= 0;
+                    const colorClass = isUp ? 'val-up' : 'val-down';
+                    const sign = isUp ? '+' : '';
+                    const rowId = `row-${CSS.escape(asset.ticker)}`;
+
+                    const row = document.createElement('div');
+                    row.dataset.ticker = asset.ticker;
+                    row.className = `ticker-row grid grid-cols-12 items-center px-2 py-1.5 text-[11px] sm:text-xs ${asset.ticker === state.selectedTicker ? 'selected' : ''}`;
+                    row.onclick = () => selectAsset(asset.ticker);
+
+                    row.innerHTML = `
+                        <div class="col-span-5 pr-1 truncate">
+                            <div class="font-bold tracking-tight">${asset.short}</div>
+                            <div class="text-[10px] opacity-70 truncate">${asset.name}</div>
+                        </div>
+                        <div class="col-span-3 text-right font-bold" data-field="price">
+                            ${formatValue(asset, q.price)}
+                        </div>
+                        <div class="col-span-2 text-right font-bold ${colorClass}" data-field="pct">
+                            ${q.change_pct !== null && q.change_pct !== undefined ? `${sign}${pct.toFixed(2)}%` : 'N/A'}
+                        </div>
+                        <div class="col-span-2 text-right font-mono text-[10px] ${colorClass}" data-field="bar">
+                            ${getAsciiBar(q.change_pct)}
+                        </div>
+                    `;
+                    state.prevPrices[asset.ticker] = q.price;
+                    container.appendChild(row);
+                });
+            });
+        }
+
+        function updateAllRows() {
+            document.querySelectorAll('.ticker-row').forEach(row => {
+                const tk = row.dataset.ticker;
+                const q = state.quotes[tk];
+                if (!q) return;
+
+                const pct = q.change_pct ?? 0;
+                const isUp = pct >= 0;
+                const colorClass = isUp ? 'val-up' : 'val-down';
+                const sign = isUp ? '+' : '';
+
+                const pxEl = row.querySelector('[data-field="price"]');
+                const pctEl = row.querySelector('[data-field="pct"]');
+                const barEl = row.querySelector('[data-field="bar"]');
+
+                pxEl.textContent = formatValue(q, q.price);
+                pctEl.textContent = q.change_pct !== null && q.change_pct !== undefined ? `${sign}${pct.toFixed(2)}%` : 'N/A';
+                pctEl.className = `col-span-2 text-right font-bold ${colorClass}`;
+                barEl.textContent = getAsciiBar(q.change_pct);
+                barEl.className = `col-span-2 text-right font-mono text-[10px] ${colorClass}`;
+
+                const prevPx = state.prevPrices[tk];
+                if (prevPx !== null && prevPx !== undefined && q.price !== null && q.price !== prevPx) {
+                    row.classList.remove('flash-positive', 'flash-negative');
+                    void row.offsetWidth;
+                    row.classList.add(q.price > prevPx ? 'flash-positive' : 'flash-negative');
+                }
+                state.prevPrices[tk] = q.price;
+            });
+        }
+
+        function selectAsset(ticker) {
+            state.selectedTicker = ticker;
+            document.querySelectorAll('.ticker-row').forEach(row => {
+                row.classList.toggle('selected', row.dataset.ticker === ticker);
+            });
+            updateSelectedDetailPanel();
+            fetchChart(ticker, state.timeframe, true);
+        }
+
+        function updateSelectedDetailPanel() {
+            const q = state.quotes[state.selectedTicker];
+            if (!q) return;
+
+            const pct = q.change_pct ?? 0;
+            const chg = q.change ?? 0;
+            const isUp = pct >= 0;
+            const sign = isUp ? '+' : '';
+            const dec = q.decimals ?? 2;
+
+            document.getElementById('detail-ticker').textContent = q.short;
+            document.getElementById('detail-symbol').textContent = q.ticker;
+            document.getElementById('detail-category').textContent = (q.category || '').replace(/^\d+\.\s*/, '');
+            document.getElementById('detail-name').textContent = q.name;
+            document.getElementById('detail-desc').textContent = q.desc || '';
+            document.getElementById('detail-sensitivity').textContent = q.sensitivity || 'MERCADOS GLOBALES';
+            document.getElementById('last-bar-time').textContent = q.last_ts || '--';
+
+            document.getElementById('detail-price').textContent = formatValue(q, q.price);
+            const chgEl = document.getElementById('detail-change');
+            chgEl.textContent = `${sign}${chg.toFixed(dec)} (${sign}${pct.toFixed(2)}%)`;
+            chgEl.className = `text-xs sm:text-sm font-bold ${isUp ? 'val-up' : 'val-down'}`;
+
+            document.getElementById('detail-high').textContent = formatValue(q, q.day_high);
+            document.getElementById('detail-low').textContent = formatValue(q, q.day_low);
+            document.getElementById('detail-prev').textContent = formatValue(q, q.prev_close);
+
+            const closedEl = document.getElementById('detail-closed');
+            if (q.market_closed) closedEl.classList.remove('hidden');
+            else closedEl.classList.add('hidden');
+        }
+
+        function renderSpreadPanel(spread) {
+            if (!spread) return;
+            const panel = document.getElementById('spread-panel');
+            const valEl = document.getElementById('spread-val');
+            const bpsEl = document.getElementById('spread-bps');
+            const regimeEl = document.getElementById('spread-regime');
+
+            const sp = spread.spread;
+            if (sp !== null && sp !== undefined) {
+                const sign = sp >= 0 ? '+' : '';
+                valEl.textContent = `${sign}${sp.toFixed(3)}%`;
+                bpsEl.textContent = `(${sign}${Math.round(spread.spread_bps)} bps)`;
+            } else {
+                valEl.textContent = 'N/A';
+                bpsEl.textContent = '';
+            }
+
+            document.getElementById('spread-10y').textContent = spread.us10y !== null ? `${spread.us10y.toFixed(3)}%` : 'N/A';
+            document.getElementById('spread-2y').textContent = spread.us2y !== null ? `${spread.us2y.toFixed(3)}%` : 'N/A';
+            document.getElementById('spread-src').textContent = `SRC: ${spread.source || 'FRED'}`;
+
+            if (spread.inverted) {
+                panel.classList.add('spread-inverted');
+                valEl.className = 'font-vt text-3xl font-bold val-down';
+                regimeEl.className = 'mt-2 text-[11px] font-bold val-down';
+                regimeEl.textContent = '⚠ ALERTA: CURVA INVERTIDA (< 0.00%)';
+            } else {
+                panel.classList.remove('spread-inverted');
+                valEl.className = 'font-vt text-3xl font-bold val-up';
+                regimeEl.className = 'mt-2 text-[11px] font-bold val-up';
+                regimeEl.textContent = '● PENDIENTE NORMAL (>= 0.00%)';
+            }
+        }
+
+        function renderMacroGrid(data) {
+            const grid = document.getElementById('macro-grid');
+            const indicators = data.indicators || [];
+            document.getElementById('macro-updated').textContent = data.fetched_at ? `SYNC ${data.fetched_at.slice(11, 19)} UTC` : '';
+            if (!indicators.length) return;
+
+            grid.innerHTML = indicators.map(ind => `
+                <div class="macro-card flex flex-col justify-between">
+                    <div class="text-[10px] opacity-75 truncate">${ind.label}</div>
+                    <div class="font-vt text-xl sm:text-2xl font-bold leading-tight mt-0.5">${ind.value}</div>
+                    <div class="text-[9px] opacity-65 truncate">${ind.date} · ${ind.source}</div>
+                </div>
+            `).join('');
+        }
+
+        // -----------------------------------------------------------------
+        // HTML5 Canvas Retro CRT Chart Renderer
+        // -----------------------------------------------------------------
+        function drawChart() {
+            const container = document.getElementById('canvas-container');
+            const canvas = document.getElementById('retroChart');
+            if (!container || !canvas) return;
+
+            const dpr = window.devicePixelRatio || 1;
+            const rect = container.getBoundingClientRect();
+            if (rect.width <= 0 || rect.height <= 0) return;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+
+            const ctx = canvas.getContext('2d');
+            ctx.scale(dpr, dpr);
+
+            const width = rect.width;
+            const height = rect.height;
+
+            const isAmber = state.theme === 'amber';
+            const primaryColor = isAmber ? '#ffb000' : '#00ff41';
+            const dimColor = isAmber ? 'rgba(255, 176, 0, 0.18)' : 'rgba(0, 255, 65, 0.18)';
+            const fillTop = isAmber ? 'rgba(255, 176, 0, 0.22)' : 'rgba(0, 255, 65, 0.22)';
+            const alertColor = isAmber ? '#ff4500' : '#ff3333';
+
+            ctx.fillStyle = '#030403';
+            ctx.fillRect(0, 0, width, height);
+
+            const q = state.quotes[state.selectedTicker] || { decimals: 2 };
+            const dec = q.decimals ?? 2;
+            const chart = state.activeChart;
+            const data = chart?.candles || [];
+
+            if (!data.length) {
+                ctx.fillStyle = primaryColor;
+                ctx.font = '12px "Fira Code", monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText('ESPERANDO DATOS DE MERCADO...', width / 2, height / 2);
+                ctx.textAlign = 'left';
+                return;
+            }
+
+            const padLeft = 14;
+            const padRight = 72;
+            const padTop = 18;
+            const padBottom = 26;
+            const plotW = width - padLeft - padRight;
+            const plotH = height - padTop - padBottom;
+
+            let minVal = Infinity;
+            let maxVal = -Infinity;
+            data.forEach(d => {
+                if (d.low < minVal) minVal = d.low;
+                if (d.high > maxVal) maxVal = d.high;
+            });
+            if (chart.prev_close !== null && chart.prev_close !== undefined) {
+                minVal = Math.min(minVal, chart.prev_close);
+                maxVal = Math.max(maxVal, chart.prev_close);
+            }
+
+            const range = maxVal - minVal || 0.01;
+            minVal -= range * 0.07;
+            maxVal += range * 0.07;
+            const finalRange = maxVal - minVal;
+
+            const getX = (i) => padLeft + (data.length === 1 ? plotW / 2 : (i / (data.length - 1)) * plotW);
+            const getY = (val) => padTop + plotH - ((val - minVal) / finalRange) * plotH;
+
+            // 1. Cuadrícula punteada retro
+            ctx.strokeStyle = dimColor;
+            ctx.lineWidth = 1;
+            ctx.setLineDash([2, 4]);
+            ctx.font = '11px "Fira Code", monospace';
+            ctx.fillStyle = primaryColor;
+
+            const gridRows = 5;
+            for (let i = 0; i <= gridRows; i++) {
+                const y = padTop + (i / gridRows) * plotH;
+                const val = maxVal - (i / gridRows) * finalRange;
+                ctx.beginPath();
+                ctx.moveTo(padLeft, y);
+                ctx.lineTo(padLeft + plotW, y);
+                ctx.stroke();
+                ctx.fillText(val.toFixed(dec), padLeft + plotW + 6, y + 4);
+            }
+
+            const gridCols = Math.min(6, Math.max(1, data.length - 1));
+            for (let i = 0; i <= gridCols; i++) {
+                const idx = Math.floor((i / gridCols) * (data.length - 1));
+                const x = getX(idx);
+                ctx.beginPath();
+                ctx.moveTo(x, padTop);
+                ctx.lineTo(x, padTop + plotH);
+                ctx.stroke();
+
+                const dObj = new Date(data[idx].time);
+                const label = (state.timeframe === '1M' || state.timeframe === '1Y')
+                    ? `${String(dObj.getUTCDate()).padStart(2, '0')}/${String(dObj.getUTCMonth() + 1).padStart(2, '0')}`
+                    : `${String(dObj.getUTCHours()).padStart(2, '0')}:${String(dObj.getUTCMinutes()).padStart(2, '0')}`;
+                ctx.fillText(label, Math.max(padLeft, x - 16), padTop + plotH + 16);
+            }
+            ctx.setLineDash([]);
+
+            // 2. Línea punteada de Cierre Anterior (PREV CLOSE)
+            if (chart.prev_close !== null && chart.prev_close !== undefined) {
+                const prevY = getY(chart.prev_close);
+                if (prevY >= padTop && prevY <= padTop + plotH) {
+                    ctx.strokeStyle = isAmber ? 'rgba(255, 176, 0, 0.55)' : 'rgba(0, 255, 65, 0.55)';
+                    ctx.setLineDash([6, 4]);
+                    ctx.beginPath();
+                    ctx.moveTo(padLeft, prevY);
+                    ctx.lineTo(padLeft + plotW, prevY);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+
+                    ctx.fillStyle = primaryColor;
+                    ctx.font = '10px "Fira Code", monospace';
+                    ctx.fillText(`PREV ${chart.prev_close.toFixed(dec)}`, padLeft + 6, prevY - 4);
+                }
+            }
+
+            // 3. Serie Principal (Línea/Área o Velas Retro)
+            if (state.chartMode === 'line') {
+                const grad = ctx.createLinearGradient(0, padTop, 0, padTop + plotH);
+                grad.addColorStop(0, fillTop);
+                grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+                ctx.beginPath();
+                ctx.moveTo(getX(0), padTop + plotH);
+                data.forEach((d, i) => ctx.lineTo(getX(i), getY(d.close)));
+                ctx.lineTo(getX(data.length - 1), padTop + plotH);
+                ctx.closePath();
+                ctx.fillStyle = grad;
+                ctx.fill();
+
+                ctx.strokeStyle = primaryColor;
+                ctx.lineWidth = 2;
+                ctx.shadowColor = primaryColor;
+                ctx.shadowBlur = 8;
+                ctx.beginPath();
+                data.forEach((d, i) => {
+                    const x = getX(i);
+                    const y = getY(d.close);
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                });
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+            } else {
+                const candleW = Math.max(2.5, Math.min(10, (plotW / data.length) * 0.65));
+                data.forEach((d, i) => {
+                    const x = getX(i);
+                    const yOpen = getY(d.open);
+                    const yClose = getY(d.close);
+                    const yHigh = getY(d.high);
+                    const yLow = getY(d.low);
+                    const isBull = d.close >= d.open;
+
+                    ctx.strokeStyle = isBull ? primaryColor : alertColor;
+                    ctx.fillStyle = isBull ? primaryColor : alertColor;
+                    ctx.lineWidth = 1.1;
+
+                    ctx.beginPath();
+                    ctx.moveTo(x, yHigh);
+                    ctx.lineTo(x, yLow);
+                    ctx.stroke();
+
+                    const bodyTop = Math.min(yOpen, yClose);
+                    const bodyH = Math.max(1.8, Math.abs(yClose - yOpen));
+                    if (isBull) ctx.strokeRect(x - candleW / 2, bodyTop, candleW, bodyH);
+                    else ctx.fillRect(x - candleW / 2, bodyTop, candleW, bodyH);
+                });
+            }
+
+            // 4. Etiqueta del último precio en el eje Y derecho
+            const lastPt = data[data.length - 1];
+            const lastX = getX(data.length - 1);
+            const lastY = getY(lastPt.close);
+
+            ctx.fillStyle = primaryColor;
+            ctx.beginPath();
+            ctx.arc(lastX, lastY, 3.8, 0, Math.PI * 2);
+            ctx.fill();
+
+            const badgeH = 18;
+            ctx.fillStyle = primaryColor;
+            ctx.fillRect(padLeft + plotW + 2, lastY - badgeH / 2, padRight - 4, badgeH);
+            ctx.fillStyle = '#050505';
+            ctx.font = 'bold 11px "Fira Code", monospace';
+            ctx.fillText(lastPt.close.toFixed(dec), padLeft + plotW + 6, lastY + 4);
+
+            // 5. Crosshair interactivo
+            if (state.mousePos) {
+                const { x, y } = state.mousePos;
+                if (x >= padLeft && x <= padLeft + plotW && y >= padTop && y <= padTop + plotH) {
+                    const ratio = (x - padLeft) / plotW;
+                    const idx = Math.min(data.length - 1, Math.max(0, Math.round(ratio * (data.length - 1))));
+                    const pt = data[idx];
+                    const snapX = getX(idx);
+                    const snapY = getY(pt.close);
+
+                    ctx.strokeStyle = primaryColor;
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([3, 3]);
+                    ctx.beginPath();
+                    ctx.moveTo(snapX, padTop);
+                    ctx.lineTo(snapX, padTop + plotH);
+                    ctx.stroke();
+
+                    ctx.beginPath();
+                    ctx.moveTo(padLeft, snapY);
+                    ctx.lineTo(padLeft + plotW, snapY);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+
+                    const dObj = new Date(pt.time);
+                    const datePart = `${dObj.getUTCFullYear()}-${String(dObj.getUTCMonth() + 1).padStart(2, '0')}-${String(dObj.getUTCDate()).padStart(2, '0')}`;
+                    const timePart = `${String(dObj.getUTCHours()).padStart(2, '0')}:${String(dObj.getUTCMinutes()).padStart(2, '0')} UTC`;
+                    document.getElementById('crosshair-info').textContent =
+                        `${datePart} ${timePart} | O:${pt.open.toFixed(dec)} H:${pt.high.toFixed(dec)} L:${pt.low.toFixed(dec)} C:${pt.close.toFixed(dec)}`;
+                }
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // Clocks & Auto-Refresh Loop (30s)
+        // -----------------------------------------------------------------
+        function updateClocksAndCountdown() {
+            const now = new Date();
+            document.getElementById('clock-utc').textContent = now.toISOString().substring(11, 19);
+            document.getElementById('clock-local').textContent = now.toTimeString().split(' ')[0];
+
+            const utcH = now.getUTCHours();
+            let session = 'ASIA / PACÍFICO';
+            if (utcH >= 7 && utcH < 13) session = 'EUROPA / LONDRES';
+            else if (utcH >= 13 && utcH < 21) session = 'AMÉRICA / WALL STREET';
+            document.getElementById('market-session').textContent = session;
+
+            if (!state.isPaused) {
+                state.countdown--;
+                if (state.countdown <= 0) {
+                    state.countdown = REFRESH_SECONDS;
+                    fetchSnapshot(true);
+                    fetchChart(state.selectedTicker, state.timeframe, false);
+                }
+                document.getElementById('next-sync-cd').textContent = `${state.countdown}s`;
+                document.getElementById('feed-status-text').textContent = `[● LIVE FEED ${REFRESH_SECONDS}s]`;
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // Boot & Event Wiring
+        // -----------------------------------------------------------------
+        window.addEventListener('DOMContentLoaded', () => {
+            logConsole('SYS', 'Iniciando MACRO-TERM v4.88 (FastAPI + Canvas CRT)...');
+
+            // Initial parallel data load
+            fetchSnapshot(false);
+            fetchChart(state.selectedTicker, state.timeframe, true);
+            fetchMacro();
+
+            updateClocksAndCountdown();
+            setInterval(updateClocksAndCountdown, 1000);
+
+            // Toggle Phosphor Green / Amber
+            document.getElementById('btn-theme').addEventListener('click', function () {
+                if (state.theme === 'green') {
+                    state.theme = 'amber';
+                    document.body.classList.add('theme-amber');
+                    this.textContent = 'TEMA: ÁMBAR RETRO';
+                    logConsole('CRT', 'Paleta cambiada a FÓSFORO ÁMBAR (#FFB000).');
+                } else {
+                    state.theme = 'green';
+                    document.body.classList.remove('theme-amber');
+                    this.textContent = 'TEMA: FÓSFORO VERDE';
+                    logConsole('CRT', 'Paleta cambiada a FÓSFORO VERDE (#00FF41).');
+                }
+                drawChart();
+            });
+
+            // Pause / Resume auto-sync
+            document.getElementById('btn-pause').addEventListener('click', function () {
+                state.isPaused = !state.isPaused;
+                const statusEl = document.getElementById('feed-status');
+                if (state.isPaused) {
+                    this.textContent = '[▶] REANUDAR FEED';
+                    this.classList.add('active');
+                    document.getElementById('next-sync-cd').textContent = 'PAUSED';
+                    statusEl.innerHTML = `<span class="inline-block w-2 h-2 rounded-full" style="background:var(--alert-color);"></span><span style="color:var(--alert-color);">[FEED PAUSADO]</span>`;
+                    logConsole('SYS', 'Auto-refresco pausado por el operador.');
+                } else {
+                    this.textContent = '[||] PAUSAR FEED';
+                    this.classList.remove('active');
+                    state.countdown = REFRESH_SECONDS;
+                    statusEl.innerHTML = `<span class="inline-block w-2 h-2 rounded-full blink" style="background:var(--primary);"></span><span id="feed-status-text">[● LIVE FEED ${REFRESH_SECONDS}s]</span>`;
+                    logConsole('SYS', 'Auto-refresco reanudado.');
+                }
+            });
+
+            // Line / Candles toggle
+            document.getElementById('btn-chart-mode').addEventListener('click', function () {
+                state.chartMode = state.chartMode === 'line' ? 'candle' : 'line';
+                this.textContent = state.chartMode === 'line' ? 'GRÁFICO: LÍNEA' : 'GRÁFICO: VELAS';
+                drawChart();
+            });
+
+            // Force Sync button
+            document.getElementById('btn-sync').addEventListener('click', forceSyncNow);
+
+            // Timeframe buttons
+            document.querySelectorAll('.tf-btn').forEach(btn => {
+                btn.addEventListener('click', function () {
+                    document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    state.timeframe = this.dataset.tf;
+                    fetchChart(state.selectedTicker, state.timeframe, true);
+                });
+            });
+
+            // Canvas crosshair mouse & touch
+            const canvas = document.getElementById('retroChart');
+            canvas.addEventListener('mousemove', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                state.mousePos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+                drawChart();
+            });
+            canvas.addEventListener('mouseleave', () => {
+                state.mousePos = null;
+                document.getElementById('crosshair-info').textContent = 'CURSOR: MUEVA EL PUNTERO SOBRE EL GRÁFICO PARA INSPECCIONAR';
+                drawChart();
+            });
+            canvas.addEventListener('touchmove', (e) => {
+                if (e.touches.length > 0) {
+                    const rect = canvas.getBoundingClientRect();
+                    state.mousePos = { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top };
+                    drawChart();
+                }
+            }, { passive: true });
+
+            window.addEventListener('resize', drawChart);
+        });
+    </script>
+</body>
+</html>
